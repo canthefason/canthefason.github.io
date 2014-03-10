@@ -202,7 +202,11 @@
       * @args     : current_prompt, command, data
       **/
       var update_content = function( p, cmd, data ) {
+        clear_content()
         content.append( '<div><span>' + p + ' ' + cmd + '</span><div>' + ( ( data ) ? data : '' ) + '</div></div>' );
+        $("#wterm").scrollTop(
+          $("#form").offset().top
+        );
       };
 
       /**
@@ -256,9 +260,6 @@
         var key    = tokens[0];
 
         hide();
-        // $('html, body').animate({
-        //   scrollTop: $("#form").offset().top
-        // }, 2000);
 
         var get_current_prompt = function() {
           return ( cprompt ) ? cprompt : settings.PS1;
