@@ -1,0 +1,150 @@
+<html>
+  <head>
+    <script src='js/jquery-2.1.0.min.js'></script>
+    <script src='js/wterm.jquery.js'></script>
+    <script src='js/jquery.typer.js'></script>
+    <link rel="stylesheet" href="./css/wterm.css" type="text/css" />
+
+    <style>
+      body { background: #000; font-size: 1.3em;  }
+    </style>
+
+    <script>
+      String.prototype.reverse = function() {
+        return this.split('').reverse().join('');
+      };
+    </script>
+
+
+    <script>
+      $( document ).ready( function() {
+        welcomeText = "Welcome to Can Yucel\'s noninteresting terminal life. To begin with type help "
+        $('#wterm').wterm( { WIDTH: '100%', HEIGHT: '100%', PS1: 'canthefason$', WELCOME_MESSAGE: 'Hello Kitty', PROMPT_CLASS: "wterm_prompt hidden" });
+        $('#welcome').typeTo(welcomeText);
+        typeSpeed = 50;
+        $.typer.options.typeSpeed = typeSpeed;
+
+        setTimeout(function(){
+          $('form').removeClass("hidden");
+          $('.wterm_prompt').removeClass("hidden");
+          $('#command').focus();
+        }, (welcomeText.length+16)*typeSpeed)
+      });
+
+
+      var command_directory = {
+        'old': function( tokens ) {
+          tokens[1] = "http://www.google.com"
+          // go( tokens );
+          return "I will reactivate the old site in a while."
+        },
+
+        'social': function( tokens ) {
+          if (!tokens[1]) {
+            return 'Error: Missing social platform parameter. Maybe you want to start from linkedin, huh? <br>' +
+              'Type: social linkedin <br>';
+          }
+
+          linkMapper = {
+            linkedin : "http://www.linkedin.com/pub/can-yücel/4b/964/7ab/",
+            twitter  : "http://www.twitter.com/canthefason",
+            facebook : "http://www.facebook.com/canthefason",
+            koding   : "http://www.koding.com/canthefason",
+            instagram: "http://www.instagram.com/canthefason"
+          }
+          link = linkMapper[tokens[1]]
+          if(!link) {
+            return 'Error: Unknown platform or I do not have an account yet. Sorry. :/<br>'
+          }
+          tokens[1] = link
+          go (tokens);
+        },
+
+         'education': function( tokens ) {
+           msc = function() {
+             return "Master of Science (M.Sc.) - Sabanci University (2007-2010) <br>" +
+              "Computer Science - Computer & Network Security Program <br>" +
+              "Thesis: A Secure Micropayment Scheme in Wireless Mesh Networks (WMNs) <br>" +
+              "Advisor: Assoc.Prof.Dr.Albert Levi <br>";
+           };
+           undergrad = function() {
+             return "Bachelor of Science (B.Sc.) - Ege University (2003-2007) <br>" +
+             "Computer Engineering <br>" +
+             "Thesis: Simulation of a Congestion Control Algorithm <br>" +
+             "Advisor: Prof.Dr.Levent Toker <br>";
+           };
+           erasmus = function() {
+             return "Erasmus - Universidade do Porto (2005-2006) <br>" +
+             "Informatics and Computer Engineering Department <br>";
+           };
+           return "<br>" + msc() + "<br>" + undergrad() + "<br>" + erasmus() + "<br>" ;
+         },
+         'skills': function (tokens) {
+             return '<br>In these days mostly using Coffeescript with Node.js and Go. Also used these technologies for enterprise projects: <br><br>'+
+               'Languages: Go, Coffeescript, Java, Groovy, Javascript, PHP, C++ <br>' +
+               'Frameworks: Node.js, Grails, Spring MVC, Zend Framework, Qt <br>' +
+               'and so on: Hibernate, Doctrine, Git, Solr, Elasticsearch, RabbitMQ, MongoDB, REST/SOAP Web Services, Jenkins, TDD<br><br>';
+         },
+         'contact': function (tokens) {
+           return '<br>I am in a period for moving to San Francisco. Till getting an H1B visa, there will be a circular country dependency problem. :) You can find me in Istanbul or in SF. Feeling lucky? <br><br>' +
+             'Mobile: +1 415 601 1989 (Active) - +90 530 419 8482 (Deactive for now) <br>' +
+             'E-mail: can.yucel@gmail.com <br><br>';
+
+         },
+         'awards': function (tokens) {
+           return '<br>2007 - 2009 Sabanci University MSc. Full Scholarship <br>' +
+                   '2007 - 2009 TÜBİTAK MSc. Scholarship<br>';
+         },
+         'run':function (tokens) {
+           return 'Ready';
+         },
+        'pwd': function ( tokens ) {
+          return "/Users/canthefason"
+        },
+        'cd': function ( tokens ) {
+          return "Why do you want to change the directory. I thought it was good here."
+        },
+        'interests': function(tokens) {
+          return "<br>Generally singing and playing guitar. Also riding bicycle or snowboarding. <br><br>" +
+                "Bands: <br> Çipetpet (Indie-Alternative Rock Cover Band) Vocalist & Guitarist (2012-2014)<br>" +
+                "Neşeli Günler Kumpanyası (70s Turkish Pop Cover Band) Guitarist & Vocalist (2007-2013)<br>" +
+                "SU Pop&Rock Choir Member and Guitarist (2007-2011)<br><br>";
+        },
+
+        'go': go = function( tokens ) {
+           var url = tokens[1];
+           window.open(url, '_blank');
+         }
+      };
+
+      for( var j in command_directory ) {
+        $.register_command( j, command_directory[j] );
+      }
+
+      $.register_command( 'help', function() {
+        return '<br>Can Yucel: A MSc Software Engineer Terminal Tale' + '<br><br>' +
+          'Type the given commands or if you think this terminal thing is not for you just type old <br>' +
+          'old&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Redirects you to old, classical, ordinary website<br>' +
+          'work&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Returns work experience that has a reference to Koding.com now.<br>' +
+          'education - Returns educational details <br>' +
+          'skills&nbsp;&nbsp;&nbsp;&nbsp;- Returns programming skills starting from Go and Coffeescript <br> ' +
+          'interests - it\'s time to play the music<br>' +
+          'awards&nbsp;&nbsp;&nbsp;&nbsp;- Just have a very few things to mention here<br>' +
+          'contact&nbsp;&nbsp;&nbsp;- Wanna say something?  <br>' +
+          // 'cv&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Returns all information above <br>' +
+          'social&nbsp;&nbsp;&nbsp;&nbsp;- Usage: social &lt;linkedin|facebook|twitter|koding|instagram&gt;<br>' +
+          '<br>'
+
+      });
+
+
+    </script>
+    <title>Can Yucel's Secret Life</title>
+  </head>
+  <body>
+
+    <div id='wterm'>
+    </div>
+
+  </body>
+</html>
