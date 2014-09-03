@@ -33,11 +33,6 @@
 
 
       var command_directory = {
-        'old': function( tokens ) {
-          tokens[1] = "http://www.google.com"
-          // go( tokens );
-          return "I will reactivate the old site in a while."
-        },
 
         'social': function( tokens ) {
           if (!tokens[1]) {
@@ -50,7 +45,8 @@
             twitter  : "http://www.twitter.com/canthefason",
             facebook : "http://www.facebook.com/canthefason",
             koding   : "http://www.koding.com/canthefason",
-            instagram: "http://www.instagram.com/canthefason"
+            instagram: "http://www.instagram.com/canthefason",
+	    github   : "http://github.com/canthefason"
           }
           link = linkMapper[tokens[1]]
           if(!link) {
@@ -64,7 +60,6 @@
             "Software Engineer <br>" +
             "Koding.com – Developer community and cloud development environment<br>" +
             "* Development and maintenance of client and server side of the project (using Go, Coffeescript, Node.js) <br>" +
-            "* Development of search infrastructure via Elasticsearch (WIP) <br>"+
             "<br><br>October 2012 – March 2013 <br><br>Doguş Planet, İstanbul/TURKEY<br>" +
             "Software Engineer <br>" +
             "N11.com – E-Commerce project financed by Doguş Group and SK Planet<br>" +
@@ -111,20 +106,20 @@
            return "<br>" + msc() + "<br>" + undergrad() + "<br>" + erasmus() + "<br>" ;
          },
          'skills': function (tokens) {
-             return '<br>In these days mostly using Coffeescript with Node.js and Go. Also used these technologies for enterprise projects: <br><br>'+
-               'Languages: Go, Coffeescript, Java, Groovy, Javascript, PHP, C++ <br>' +
+             return '<br>In these days mostly using Go and CoffeeScript with Node.js. Also used these technologies for enterprise projects: <br><br>'+
+               'Languages: Go, CoffeeScript, Java, Groovy, JavaScript, PHP, C++ <br>' +
                'Frameworks: Node.js, Grails, Spring MVC, Zend Framework, Qt <br>' +
-               'and so on: Hibernate, Doctrine, Git, Solr, Elasticsearch, RabbitMQ, MongoDB, REST/SOAP Web Services, Jenkins, TDD<br><br>';
+               'and so on: Redis, Hibernate, Doctrine, Git, Solr, Elasticsearch, RabbitMQ, MongoDB, REST/SOAP Web Services <br><br>';
          },
          'contact': function (tokens) {
-           return '<br>I am in a period for moving to San Francisco. Till getting an H1B visa, there will be a circular country dependency problem. :) You can find me in Istanbul or in SF. Feeling lucky? <br><br>' +
-             'Mobile: +1 415 601 1989 (Active) - +90 530 419 8482 (Deactive for now) <br>' +
+           return '<br>I am moving to San Francisco in October. Till that time I am residing in Turkey. <br><br>' +
+             'Mobile: +1 415 601 1989 (Deactive till October) - +90 530 419 8482 (Active) <br>' +
              'E-mail: can.yucel@gmail.com <br><br>';
 
          },
          'awards': function (tokens) {
-           return '<br>2007 - 2009 Sabanci University MSc. Full Scholarship <br>' +
-                   '2007 - 2009 TÜBİTAK MSc. Scholarship<br>';
+           return '<br>2007 - 2009 Sabanci University M.Sc. Full Scholarship <br>' +
+                   '2007 - 2009 TÜBİTAK M.Sc. Scholarship<br>';
          },
          'run':function (tokens) {
            return 'Ready';
@@ -136,7 +131,7 @@
           return "Why do you want to change the directory. I thought it was good here."
         },
         'interests': function(tokens) {
-          return "<br>Generally singing and playing guitar. Also riding bicycle or snowboarding. <br><br>" +
+          return "<br>Generally singing and playing guitar. Also riding bicycle and snowboarding. <br><br>" +
                 "Bands: <br> Çipetpet (Indie-Alternative Rock Cover Band) Vocalist & Guitarist (2012-2014)<br>" +
                 "Neşeli Günler Kumpanyası (70s Turkish Pop Cover Band) Guitarist & Vocalist (2007-2013)<br>" +
                 "SU Pop&Rock Choir Member and Guitarist (2007-2011)<br><br>";
@@ -156,9 +151,8 @@
       }
 
       $.register_command( 'help', function() {
-        return '<br>Can Yucel: A MSc Software Engineer Terminal Tale' + '<br><br>' +
-          'Type the given commands or if you think this terminal thing is not for you just type old <br>' +
-          'old&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Redirects you to old, classical, ordinary website<br>' +
+        return '<br>Can Yucel: A M.Sc. Software Engineer with some music skills' + '<br><br>' +
+          'You can type the given commands or I do not know what else I can offer to you. <br>' +
           'work&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Returns work experience that has a reference to Koding.com now.<br>' +
           'education - Returns educational details <br>' +
           'skills&nbsp;&nbsp;&nbsp;&nbsp;- Returns programming skills starting from Go and Coffeescript <br> ' +
