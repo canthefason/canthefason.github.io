@@ -18,8 +18,7 @@
 
     <script>
       // if you have been this far i have some words to say: i know this code sucks. So 90s that all the javascript codes are embedded
-      // in an html file, and it is a shame for me. But for making it work in a few hours, i had to. Think as these are happy trees
-      // in a Bob Ross work.
+      // in an html file, and it is a shame for me. But for making it work in a few hours, i had to. Consider it as one of the happy trees of Bob Ross
       $( document ).ready( function() {
         welcomeText = "Welcome to Can Yucel\'s noninteresting terminal life. To begin with type help "
         $('#wterm').wterm( { WIDTH: '100%', HEIGHT: '100%', PS1: 'canthefason$', WELCOME_MESSAGE: 'Hello Kitty', PROMPT_CLASS: "wterm_prompt hidden" });
@@ -39,8 +38,8 @@
 
         'social': function( tokens ) {
           if (!tokens[1]) {
-            return 'Error: Missing social platform parameter. Maybe you want to start from linkedin, huh? <br>' +
-              'Type: social linkedin <br>';
+            return 'Error: Missing social platform parameter. Maybe you want to start from github, huh? <br>' +
+              'Type: social github <br>';
           }
 
           linkMapper = {
@@ -63,6 +62,7 @@
             "Software Engineer <br>" +
             "Koding.com – Developer community and cloud development environment<br>" +
             "* Development and maintenance of client and server side of the project (using Go, Coffeescript, Node.js) <br>" +
+            "* Realtime messaging architecture, notifications, and most of the emailing stuff (using Go) <br>" +
             "<br><br>October 2012 – March 2013 <br><br>Doguş Planet, İstanbul/TURKEY<br>" +
             "Software Engineer <br>" +
             "N11.com – E-Commerce project financed by Doguş Group and SK Planet<br>" +
@@ -115,8 +115,8 @@
                'and so on: Redis, Hibernate, Doctrine, Git, Solr, Elasticsearch, RabbitMQ, MongoDB, REST/SOAP Web Services <br><br>';
          },
          'contact': function (tokens) {
-           return '<br>I am moving to San Francisco in October. Till that time I am residing in Turkey. <br><br>' +
-             'Mobile: +1 415 601 1989 (Deactive till October) - +90 530 419 8482 (Active) <br>' +
+           return '<br>Foster City, CA, 94404 (South Bay Area) <br><br>' +
+             'Mobile: +1 415 601 1989 (Active)<br>' +
              'E-mail: can.yucel@gmail.com <br><br>';
 
          },
@@ -156,14 +156,14 @@
       $.register_command( 'help', function() {
         return '<br>Can Yucel: A M.Sc. Software Engineer with some music skills' + '<br><br>' +
           'You can type the given commands or I do not know what else I can offer to you. <br>' +
-          'work&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Returns work experience that has a reference to Koding.com now.<br>' +
+          'work&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Returns work experience which resides in Koding.com lately.<br>' +
           'education - Returns educational details <br>' +
-          'skills&nbsp;&nbsp;&nbsp;&nbsp;- Returns programming skills starting from Go and Coffeescript <br> ' +
-          'interests - it\'s time to play the music<br>' +
+          'skills&nbsp;&nbsp;&nbsp;&nbsp;- Returns programming skills (in these days mostly Go)<br> ' +
+          'interests - Remember the tune<br>' +
           'awards&nbsp;&nbsp;&nbsp;&nbsp;- Just have a very few things to mention here<br>' +
-          'contact&nbsp;&nbsp;&nbsp;- Wanna say something?  <br>' +
+          'contact&nbsp;&nbsp;&nbsp;- Hi, I\'m Dory  <br>' +
           // 'cv&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Returns all information above <br>' +
-          'social&nbsp;&nbsp;&nbsp;&nbsp;- Usage: social &lt;linkedin|facebook|twitter|koding|instagram|github&gt;<br>' +
+          'social&nbsp;&nbsp;&nbsp;&nbsp;- Usage: social &lt;github|linkedin|facebook|twitter|koding|instagram&gt;<br>' +
           '<br>'
 
       });
