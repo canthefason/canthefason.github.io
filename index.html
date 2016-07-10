@@ -3,201 +3,22 @@
     <script src='js/jquery-2.1.0.min.js'></script>
     <script src='js/wterm.jquery.js'></script>
     <script src='js/jquery.typer.js'></script>
-    <link rel="stylesheet" href="./css/wterm.css" type="text/css" />
+    <script src='js/index.js'></script>
+    <link rel="stylesheet" href="css/wterm.css" type="text/css" />
+    <link rel="stylesheet" href="css/index.css" type="text/css" />
 
-    <style>
-      body { background: #000; font-size: 1.3em;  }
-    </style>
-
-    <script>
-      String.prototype.reverse = function() {
-        return this.split('').reverse().join('');
-      };
-    </script>
-
-
-    <script>
-      // if you have been this far i have some words to say: i know this code sucks. So 90s that all the javascript codes are embedded
-      // in an html file, and it is a shame for me. But for making it work in a few hours, i had to. Consider it as one of the happy trees of Bob Ross
-      $( document ).ready( function() {
-        welcomeText = "Welcome to Can Yucel\'s noninteresting terminal life. To begin with type help "
-        $('#wterm').wterm( { WIDTH: '100%', HEIGHT: '100%', PS1: 'canthefason$', WELCOME_MESSAGE: 'Hello Kitty', PROMPT_CLASS: "wterm_prompt hidden" });
-        $('#welcome').typeTo(welcomeText);
-        typeSpeed = 50;
-        $.typer.options.typeSpeed = typeSpeed;
-
-        setTimeout(function(){
-          $('form').removeClass("hidden");
-          $('.wterm_prompt').removeClass("hidden");
-          $('#command').focus();
-        }, (welcomeText.length+16)*typeSpeed)
-      });
-
-
-      var command_directory = {
-
-        'social': function( tokens ) {
-          if (!tokens[1]) {
-            return 'Error: Missing social platform parameter. Maybe you want to start from github, huh? <br>' +
-              'Type: social github <br>';
-          }
-
-          linkMapper = {
-            linkedin : "http://www.linkedin.com/pub/can-yücel/4b/964/7ab/",
-            twitter  : "http://www.twitter.com/canthefason",
-            facebook : "http://www.facebook.com/canthefason",
-            koding   : "http://www.koding.com/canthefason",
-            instagram: "http://www.instagram.com/canthefason",
-	    github   : "http://github.com/canthefason"
-          }
-          link = linkMapper[tokens[1]]
-          if(!link) {
-            return 'Error: Unknown platform or I do not have an account yet. Sorry. :/<br>'
-          }
-          tokens[1] = link
-          go (tokens);
-        },
-        'work': function( tokens ) {
-          return "<br>October 2013 - Present <br><br>Koding, San Francisco, CA/USA<br>" +
-            "Software Engineer <br>" +
-            "Koding.com – Developer community and cloud development environment<br>" +
-            "* Development and maintenance of client and server side of the project (using Go, Coffeescript, Node.js) <br>" +
-            "* Realtime messaging architecture, notifications, and most of the emailing stuff (using Go) <br>" +
-            "<br><br>October 2012 – March 2013 <br><br>Doguş Planet, İstanbul/TURKEY<br>" +
-            "Software Engineer <br>" +
-            "N11.com – E-Commerce project financed by Doguş Group and SK Planet<br>" +
-            "* Development of REST services (JAX-RS) and data fetching operations via Icecat (used Java, Solr, Spring MVC)<br>" +
-            "* Development of search infrastructure and other various features in Mallfront (End-user part)<br><br>" +
-            "<br>February 2011 – May 2012 <br><br> TART New Media, İstanbul/TURKEY <br>" +
-            "Lead Developer<br>" +
-            "Playstore.com - E-Commerce project financed by TTNet <br>" +
-            "* Responsible for the architectural design and development (used PHP and Zend Framework)<br>" +
-            "* Development of search infrastructure via Apache SOLR and SQL generator based on Doctrine 2.0 entities.<br>" +
-            "<br>Keyfimoda.com / Modajenik.com - Private shopping projects<br>" +
-            "* Development of SOAP web services and interop services<br>"+
-            "<br><br>October 2009 – February 2010 <br><br>TÜBİTAK – The Scientific and Technological Research Council of Turkey, Kocaeli/TURKEY<br>" +
-            "Researcher<br>" +
-            "DATAS (Denizalti Taktik Simulatoru - Submarine Tactics Simulator)<br>" +
-            "Development of graphical user interface and plugins of the project (used C++ and Qt)<br><br>" +
-            "<br>September 2007 - June 2009 <br><br>Sabanci University, İstanbul/TURKEY<br>" +
-            "Teaching Assistant (TA) <br>" +
-            "<br>* TA of Assis. Prof. Dr. Cemal Yilmaz’s Software Engineering (Spring 2009)<br>" +
-            "* TA of Assoc. Prof. Dr. Albert Levi’s Introduction to Computing (Fall 2007 & Fall 2008)<br>" +
-            "* TA of Prof. Dr. Ersin Karabudak’s Advanced Programming (Spring 2008)<br><br>" +
-            "<br>August 2004 - June 2007 <br><br>ARGEFAR Ege University Drug R&D Center, İzmir/TURKEY<br>" +
-            "Supervisor (September 2006 – June 2007) and Assistant Supervisor (February 2006 – September 2006)<br>" +
-            "* Responsible for the management of the IT department. (Part-time)<br><br>";
-        },
-
-         'education': function( tokens ) {
-           msc = function() {
-             return "Master of Science (M.Sc.) - Sabanci University (2007-2010) <br>" +
-              "Computer Science - Computer & Network Security Program <br>" +
-              "Thesis: A Secure Micropayment Scheme in Wireless Mesh Networks (WMNs) <br>" +
-              "Advisor: Assoc.Prof.Dr.Albert Levi <br>";
-           };
-           undergrad = function() {
-             return "Bachelor of Science (B.Sc.) - Ege University (2003-2007) <br>" +
-             "Computer Engineering <br>" +
-             "Thesis: Simulation of a Congestion Control Algorithm <br>" +
-             "Advisor: Prof.Dr.Levent Toker <br>";
-           };
-           erasmus = function() {
-             return "Erasmus - Universidade do Porto (2005-2006) <br>" +
-             "Informatics and Computer Engineering Department <br>";
-           };
-           return "<br>" + msc() + "<br>" + undergrad() + "<br>" + erasmus() + "<br>" ;
-         },
-         'skills': function (tokens) {
-             return '<br>In these days mostly using Go and CoffeeScript with Node.js. Also used these technologies for enterprise projects: <br><br>'+
-               'Languages: Go, CoffeeScript, Java, Groovy, JavaScript, PHP, C++ <br>' +
-               'Frameworks: Node.js, Grails, Spring MVC, Zend Framework, Qt <br>' +
-               'and so on: Redis, Hibernate, Doctrine, Git, Solr, Elasticsearch, RabbitMQ, MongoDB, REST/SOAP Web Services <br><br>';
-         },
-         'contact': function (tokens) {
-           return '<br>Foster City, CA, 94404 (South Bay Area) <br><br>' +
-             'Mobile: +1 415 601 1989 (Active)<br>' +
-             'E-mail: can.yucel@gmail.com <br><br>';
-
-         },
-         'awards': function (tokens) {
-           return '<br>2007 - 2009 Sabanci University M.Sc. Full Scholarship <br>' +
-                   '2007 - 2009 TÜBİTAK M.Sc. Scholarship<br>';
-         },
-         'run':function (tokens) {
-           return 'Ready';
-         },
-        'pwd': function ( tokens ) {
-          return "/Users/canthefason"
-        },
-        'cd': function ( tokens ) {
-          return "Why do you want to change the directory. I thought it was good here."
-        },
-        'interests': function(tokens) {
-          return "<br>Generally singing and playing guitar. Also riding bicycle and snowboarding. <br><br>" +
-                "Bands: <br> Çipetpet (Indie-Alternative Rock Cover Band) Vocalist & Guitarist (2012-2014)<br>" +
-                "Neşeli Günler Kumpanyası (70s Turkish Pop Cover Band) Guitarist & Vocalist (2007-2013)<br>" +
-                "SU Pop&Rock Choir Member and Guitarist (2007-2011)<br><br>";
-        },
-        'ls': function(tokens) {
-          return "less is more";
-        },
-
-        'go': go = function( tokens ) {
-           var url = tokens[1];
-           window.open(url, '_blank');
-         }
-      };
-
-      for( var j in command_directory ) {
-        $.register_command( j, command_directory[j] );
-      }
-
-      $.register_command( 'help', function() {
-        return '<br>Can Yucel: A M.Sc. Software Engineer with some music skills' + '<br><br>' +
-          'You can type the given commands or I do not know what else I can offer to you. <br>' +
-          'work&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Returns work experience which resides in Koding.com lately.<br>' +
-          'education - Returns educational details <br>' +
-          'skills&nbsp;&nbsp;&nbsp;&nbsp;- Returns programming skills (in these days mostly Go)<br> ' +
-          'interests - Remember the tune<br>' +
-          'awards&nbsp;&nbsp;&nbsp;&nbsp;- Just have a very few things to mention here<br>' +
-          'contact&nbsp;&nbsp;&nbsp;- Hi, I\'m Dory  <br>' +
-          // 'cv&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Returns all information above <br>' +
-          'social&nbsp;&nbsp;&nbsp;&nbsp;- Usage: social &lt;github|linkedin|facebook|twitter|koding|instagram&gt;<br>' +
-          '<br>'
-
-      });
-
-
-    </script>
-    <script type="text/javascript">
-
-        var _gaq = _gaq || [];
-        _gaq.push(['_setAccount', 'UA-35926990-1']);
-        _gaq.push(['_trackPageview']);
-
-        (function() {
-            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
-            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
-            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
-        })();
-
-    </script>
-
-    <title>Can Yucel's Terminal Life</title>
+    <title>Can Yucel in the Terminal</title>
     <meta name="description" content="Can Yucel's Terminal Life">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <meta name="keywords" content="Coffeescript, Go, golang, Node.js, Redis, Wercker, Microservice architecture, MongoDB, PHP, Zend Framework, Grails, Java, Git, Omnet++, C++, Qt, RabbitMQ,Solr,Elasticsearch, Hibernate,Doctrine, Software Design Patterns, MVC, Continuous Integration, Jenkins, Scala, Vocalist, Guitarist, Muppet, Snowboard, Çipetpet, Neşeli Günler Kumpanyası, Shuffle, Koro, Choir, KoroSU, Sabancı Universitesi,Sabanci University, Ege University, Universidade do Porto, Koding, n11.com, playstore, Keyfimoda, Modajenik, DATAS,Erasmus, Istanbul, Argefar, Goller Cepte">
+    <meta name="keywords" content="Microservices, Docker, Go, golang, Kubernetes, Container Orchestration, Terraform, AWS, CI/CD, Architecture, Node.js, Redis, MongoDB, Grails, Java, Git, Omnet++, C++, Qt, RabbitMQ,Solr,Elasticsearch, Hibernate,Doctrine, Software Design Patterns, MVC, Continuous Integration, Jenkins, Scala, Vocalist, Guitarist, Muppet, Snowboard, Mechanical Turk, Çipetpet, Neşeli Günler Kumpanyası, Shuffle, Koro, Choir, KoroSU, Sabancı Universitesi,Sabanci University, Ege University, Universidade do Porto, Koding, n11.com, playstore, Keyfimoda, Modajenik, DATAS,Erasmus, Istanbul, San Francisco, Bay Area, Argefar, Goller Cepte">
     <meta property="og:title" content="Can Yucel's Terminal Life"/>
     <meta property="og:image" content="./img/terminal.png"/>
-    <meta property="og:site_name" content="Can Yucel's Terminal Life"/>
+    <meta property="og:site_name" content="Can Yucel in the Terminal"/>
     <meta property="og:description" content="A Software Engineer and Vocalist&amp;Guitar player"/>
     <link rel="shortcut icon" type="image/png" href="./img/favicon.png"/>
   </head>
   <body>
-
     <div id='wterm'>
     </div>
-
   </body>
 </html>
