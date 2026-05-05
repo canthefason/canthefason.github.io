@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Building a Local Voice Assistant That Actually Beats Alexa (By Mostly Abandoning the LLM)</title>
+  <style>
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 21px;
+      line-height: 1.7;
+      color: #292929;
+      max-width: 740px;
+      margin: 60px auto;
+      padding: 0 20px;
+    }
+    h1 { font-size: 42px; line-height: 1.2; font-weight: 700; margin-bottom: 8px; }
+    h2 { font-size: 28px; font-weight: 700; margin-top: 52px; }
+    h3 { font-size: 22px; font-weight: 700; margin-top: 36px; }
+    p { margin: 24px 0; }
+    em { font-style: italic; }
+    strong { font-weight: 700; }
+    pre {
+      background: #f5f5f5;
+      border-left: 3px solid #ccc;
+      padding: 16px 20px;
+      overflow-x: auto;
+      font-size: 16px;
+      line-height: 1.5;
+      margin: 28px 0;
+    }
+    code { font-family: 'Courier New', Courier, monospace; }
+    p > code, li > code {
+      background: #f5f5f5;
+      padding: 2px 5px;
+      font-size: 17px;
+      border-radius: 3px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 28px 0;
+      font-size: 17px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px 14px;
+      text-align: left;
+    }
+    th { background: #f5f5f5; font-weight: 700; }
+    a { color: #1a8917; }
+    ul, ol { padding-left: 28px; margin: 24px 0; }
+    li { margin: 8px 0; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 48px 0; }
+    .subtitle { color: #6b6b6b; font-size: 20px; margin-top: 8px; margin-bottom: 40px; }
+  </style>
+</head>
+<body>
+
+<h1>Building a Local Voice Assistant That Actually Beats Alexa (By Mostly Abandoning the LLM)</h1>
+<p class="subtitle"><em>A technical deep-dive from the trenches of making this actually work</em></p>
+
+<hr>
+
+<p>For a long time, my smart home voice assistant was Alexa. And for a long time, I was living with its inconsistencies. Every command was a small act of hope — you speak, and you wait to see if it understood, if it connected, if the right thing happened. When it did not respond, there was no way to know why. Was it a network issue? A skill timeout? Did it even hear me? The black box nature of it bothered me more and more. I wanted something I could understand, debug, and control.</p>
+
+<p>That frustration is what eventually brought me to running a fully local voice assistant on Raspberry Pi 5 with Home Assistant. I have been on a longer journey to remove cloud dependencies from my home — replacing various hubs and third-party services one by one — and a local voice assistant was always the hardest piece. The LLM inference was the blocker. Running even a small model on Pi's CPU was painful. You ask something, you wait. You wait more.</p>
+
+<p>Then I got Hailo AI HAT+2. This is a small M.2 accelerator board that sits on top of the Pi 5. It has a dedicated NPU with 40 TOPS of compute. The promise was: run AI workloads at the edge, without cloud, without GPU, without burning your electricity bill. I was skeptical. But the results surprised me — and the path from "Hailo NPU running a local LLM" to "something that actually replaces Alexa" turned out to be a lot less direct than I expected.</p>
+
+<p>Normally this post would come later in my series — after I write about removing all the cloud dependencies first. But buying bleeding-edge hardware like AI HAT+2 comes with a cost beyond the price tag: limited community support, sparse documentation, and a lot of time spent reading source code to understand what is actually happening. I wanted to publish this now, in case there are other people out there struggling with exactly this hardware and not finding answers. The offline-first setup series will catch up.</p>
+
+<hr>
+
+<h2>The Stack</h2>
+
+<p>Before I go into the problems, let me show you what we built:</p>
+
+<pre><code>Waveshare ESP32-S3 (wake word + mic) → hailo-whisper (STT, NPU) → Home Assistant → hailo-ollama (LLM, NPU) → piper (TTS) → Speaker</code></pre>
+
+<p>All the heavy lifting runs on one Pi 5 with AI HAT+2, all AI models on the Hailo-10H NPU. The ESP32-S3 handles the always-on part at the edge. Here is the complete picture:</p>
+
+<table>
+  <thead>
+    <tr><th>Component</th><th>Hardware / Container</th><th>Protocol</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Wake Word + Mic</td><td>Waveshare ESP32-S3 AI Smart Speaker</td><td>ESPHome / Wyoming</td><td>Always-on, runs on device</td></tr>
+    <tr><td>Speech-to-Text</td><td><code>hailo-whisper</code> container</td><td>Wyoming</td><td>Hailo-10H NPU</td></tr>
+    <tr><td>LLM Inference</td><td><code>hailo-ollama</code> container</td><td>HTTP (custom)</td><td>Hailo-10H NPU</td></tr>
+    <tr><td>Text-to-Speech</td><td><code>piper</code> container</td><td>Wyoming</td><td>CPU</td></tr>
+    <tr><td>Orchestration</td><td><code>homeassistant</code> container</td><td>REST / WebSocket</td><td>CPU</td></tr>
+  </tbody>
+</table>
+
+<p>The ESP32-S3 is the always-listening piece. It detects the wake word locally on the microcontroller itself — nothing is streamed to the Pi until the wake word fires. Once triggered, it sends the audio over Wyoming protocol to hailo-whisper for transcription. Home Assistant then takes over: sends the transcribed text to hailo-ollama, gets a response, passes it to Piper, and the audio plays back through the speaker. Clean pipeline. But making these pieces talk to each other — that is where the real engineering begins.</p>
+
+<hr>
+
+<h2>First Challenge: hailo-ollama Is Not Ollama</h2>
+
+<p>Home Assistant has an integration called <strong>Extended OpenAI Conversation</strong>. It speaks OpenAI-compatible API. Standard Ollama also speaks OpenAI-compatible API on port 11434. So in theory, you point HA at <code>http://localhost:11434/v1</code>, it talks to Ollama, done.</p>
+
+<p>But <code>hailo-ollama</code> is not Ollama. It is a completely different implementation, built by Hailo to run models on their HEF (Hailo Executable Format) hardware. It shares the same port convention by default but the similarities end there.</p>
+
+<p>First problem I discovered: the <code>/v1/models</code> endpoint that Home Assistant calls to enumerate available models — hailo-ollama does not have it in standard Ollama format. It has <code>/api/tags</code> endpoint instead.</p>
+
+<p>Second problem: the model manifest format is completely different. Standard Ollama uses GGUF files and an OCI-style manifest. hailo-ollama uses a JSON manifest like this:</p>
+
+<pre><code>{
+  "hef_h10h": "sha256:abc123...",
+  "details": { ... }
+}</code></pre>
+
+<p>There is no <code>layers</code>, no <code>config</code>, no standard format. Running <code>hailo-ollama pull</code> actually starts a second server process that immediately crashes.</p>
+
+<p>Third problem — and this one cost me many hours: hailo-ollama has no <code>/api/create</code> endpoint. Standard Ollama lets you create model aliases with a Modelfile. hailo-ollama has none of this. You must use the exact model name. No aliases.</p>
+
+<p>So the full picture: different API surface, different manifest format, different blob storage layout, no model aliases. Home Assistant integration that "should just work" — completely broken.</p>
+
+<h3>The Solution: A Translation Proxy</h3>
+
+<p>The cleanest approach was to put a proxy between Home Assistant and hailo-ollama. This proxy would:</p>
+
+<ol>
+  <li>Listen on port 11434 (what HA expects Ollama on)</li>
+  <li>Translate incoming requests to what hailo-ollama actually understands</li>
+  <li>Forward to hailo-ollama on port 11436 (we moved native server there)</li>
+  <li>Return responses back to HA in format it expects</li>
+</ol>
+
+<p>We wrote this proxy in Python. It lives in its own <code>hailo_ollama_proxy/</code> directory with a dedicated Dockerfile — so it is independently versioned, testable, and deployable.</p>
+
+<p><strong>Endpoint translation</strong> is the simplest fix: <code>/v1/models</code> → <code>/api/tags</code>. When HA calls <code>/v1/models</code>, the proxy rewrites the path and reformats the response to match what HA expects.</p>
+
+<p><strong>Two-layer JSON sanitisation</strong> is where it gets interesting. There are two separate bugs that interact with each other.</p>
+
+<p><em>Layer 1</em>: HA sends literal newline characters (<code>U+000A</code>) inside JSON string values. This is invalid JSON — newlines inside strings must be escaped as <code>\n</code>. The fix: scan for literal control characters before parsing and re-encode them.</p>
+
+<p><em>Layer 2</em>: Even after Layer 1 gives hailo-ollama valid JSON with properly escaped <code>\n</code> sequences — hailo-ollama's internal HailoRT genAI library re-serialises message content to its own format and does not escape newlines during that pass. It takes the <code>\n</code> escape sequence, converts it back to a literal LF, and puts that into a new JSON string. Invalid JSON again, deep inside hailo-ollama's pipeline.</p>
+
+<p>The fix for Layer 2 is more aggressive: after Layer 1, parse the JSON, then walk through all <code>messages[].content</code>, <code>prompt</code>, and <code>system</code> string values and replace newlines, carriage returns, and tabs with spaces:</p>
+
+<pre><code>def sanitize_for_hailo(body_dict):
+    # marker: hailo-sanitize-v1
+    for msg in body_dict.get("messages", []):
+        if isinstance(msg.get("content"), str):
+            msg["content"] = msg["content"].replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    ...</code></pre>
+
+<p>We mark this function with a comment <code># hailo-sanitize-v1</code> and the Docker image build script checks for this string to verify the proxy has the correct version of the sanitisation code. This prevents situations where we rebuild the image but accidentally ship an old proxy.</p>
+
+<h3>NPU Sharing: The Detail That Catches Everyone</h3>
+
+<p>Both <code>hailo-whisper</code> and <code>hailo-ollama</code> need access to the same physical NPU device (<code>/dev/h1x-0</code>). HailoRT by default does not share well. The solution is the <code>HAILO_VDEVICE_GROUP_ID</code> environment variable, set to the same value in both containers:</p>
+
+<pre><code># compose.yaml
+services:
+  hailo-whisper:
+    environment:
+      - HAILO_VDEVICE_GROUP_ID=SHARED
+  hailo-ollama:
+    environment:
+      - HAILO_VDEVICE_GROUP_ID=SHARED
+      - HAILO_OLLAMA_VDEVICE_GROUP_ID=SHARED</code></pre>
+
+<p>With this, HailoRT manages a shared VDevice pool and both containers can time-share the NPU without conflict. One important operational note: when installing a new model, hailo-whisper must be stopped first. Model download triggers VDevice initialisation in hailo-ollama, and if hailo-whisper is simultaneously holding the device, you get a hard crash.</p>
+
+<hr>
+
+<h2>Second Challenge: The Accuracy vs. Latency Trap</h2>
+
+<p>With the proxy working, the full pipeline was running end-to-end. <code>qwen2.5:1.5b</code> on the Hailo-10H NPU was a real improvement over CPU — roughly 6–8x faster. But "faster than CPU inference" and "fast enough to replace Alexa" turned out to be two very different bars.</p>
+
+<p>The model is small and non-deterministic. On commands with an obvious single answer — "dim the office lights to 30 percent" — it occasionally returned the right tool call targeting the wrong entity, or emitted <code>brightness_pct: 80</code> for "darker". The natural response to this is to add more context: more examples in the system prompt, more entity descriptions, more guidance on when to call which service.</p>
+
+<p>This worked. Accuracy improved. But each example added to the system prompt grows the context window, and on a 1.5B model running on constrained hardware, context window size has a direct cost: response time climbed to around 30 seconds for a typical command with a well-filled context.</p>
+
+<p>30 seconds is not a voice assistant. That is a loading screen. My original goal was better accuracy <em>and</em> latency compared to Alexa. Running qwen2.5:1.5b on the AI HAT+2's limited memory, I was getting better accuracy at the cost of latency that made the system unusable for daily life. So I decided to pivot.</p>
+
+<hr>
+
+<h2>The Pivot: Determinism Over Intelligence</h2>
+
+<p>While wrestling with the LLM accuracy problem, I noticed something: when Hailo Whisper correctly transcribed a short phrase that matched one of HA's built-in intents — "turn on the lights", "set brightness to fifty percent" — the response was near-instant. Under two seconds total. HA's local intent recognition fired, the light changed, Piper spoke the confirmation. No LLM involved, no latency, no hallucination. Just correct.</p>
+
+<p>That observation led to a reframe: I had been feeding more and more examples into the LLM system prompt to make it handle all the commands I actually use. But if I was going to enumerate all those combinations anyway — why not add them directly to Home Assistant as custom sentence patterns, and skip the LLM entirely for those cases?</p>
+
+<p>This is what Home Assistant's hassil intent system is built for. When <code>prefer_local_intents: true</code> is set on a pipeline, HA runs its local NLU first. If the phrase matches a pattern, the action fires deterministically in milliseconds. The LLM is only invoked when local matching fails.</p>
+
+<p>The gap is that HA's built-in sentences cover common patterns like "turn on the lights" and "set brightness to N percent" but miss surface forms that people actually use. I filled these gaps with custom sentence YAML files.</p>
+
+<h3>Using Claude to Generate the Sentences</h3>
+
+<p>Writing exhaustive custom sentences by hand is tedious. I used Claude to generate them. Given a target intent and a list of entities, it produces all the natural surface forms a person might use — including the variants that are easy to miss.</p>
+
+<p>For example, for bedroom light dimming, the generated sentences covered patterns like:</p>
+
+<pre><code># lights.yaml
+language: "en"
+intents:
+  HassLightSet:
+    data:
+      - sentences:
+          - "dim [the] {area} [lights|light] to {brightness} [percent|%|pct]"
+          - "[set] {area} [lights|light] [to] {brightness} [percent|%|pct]"
+          - "{area} [lights|light] at {brightness} [percent|%|pct]"
+          - "make [the] {area} [lights|light] {brightness} [percent|%|pct]"</code></pre>
+
+<p>Beyond lights, we built out sentence files for:</p>
+
+<ul>
+  <li><strong>shades.yaml</strong> — 12 natural shade commands ("open the main bedroom blinds", "bedroom shades to private", "living room sunny mode") mapped to <code>HassTurnOn</code> with fixed <code>name</code> slots pointing to the correct PowerView scene friendly names</li>
+  <li><strong>heat_pump.yaml</strong> — a custom <code>HeatPumpSource</code> intent with slots for each of the four temperature source options ("bedroom", "main bedroom", "living room", "thermostat")</li>
+</ul>
+
+<p>The <code>HeatPumpSource</code> intent requires one extra step: an <code>intent_script</code> block in <code>configuration.yaml</code> that maps it to a <code>select.select_option</code> service call and generates the spoken confirmation. Built-in intents like <code>HassLightSet</code> handle their own service calls and speech; custom intents need this wiring done explicitly.</p>
+
+<p>The result: the commands I actually use daily — adjust a light, move the shades, change the heat pump sensor — never touch the LLM. Response is under two seconds, and the outcome is always correct.</p>
+
+<hr>
+
+<h2>Handling the Imperfect Transcription Problem</h2>
+
+<p>Even with Hailo Whisper doing well, there were still times it did not understand me correctly. English is not my first language, and the model would sometimes transcribe "dim the lights" as "dim the lights" with a different entity name, or mishear a room name entirely.</p>
+
+<p>For a set of known commands, the failure mode I cared about was not "wrong answer" but "no answer at all" — the STT output not matching any custom sentence, causing the LLM to kick in and introduce latency. What matters is getting immediate responses even for near-miss transcriptions.</p>
+
+<p>The solution was adding a corrections layer to the Whisper pipeline. Before the transcription reaches HA, the proxy checks the output against a configurable corrections file — a list of regex-to-replacement pairs:</p>
+
+<pre><code>[
+  ["\\bleaving room\\b", "living room"],
+  ["\\bturn of\\b(?!\\s*f)", "turn off"]
+]</code></pre>
+
+<p>The first entry fixes a persistent mishearing: "leaving room" instead of "living room". The second catches a common truncation where the final consonant drops off — "turn of" instead of "turn off" — but uses a negative lookahead so it does not accidentally rewrite "turn off" itself.</p>
+
+<p>Corrections handle known misrecognitions and common shorthand that would not otherwise match a sentence pattern. They are cheap to add and make the system noticeably more robust for the commands you actually use.</p>
+
+<p>To make it easy to grow the corrections list — and to discover what commands other family members are actually saying — I enabled Hailo Whisper to log both the transcribed sentence and the Home Assistant response it triggered. The log becomes a running record of all voice interactions: what was said, what HA understood, what it did. From that, it is straightforward to spot patterns and either add corrections or add new custom sentences for commands that are being used but not yet covered.</p>
+
+<hr>
+
+<h2>What's Next: Public LLM as a Fallback</h2>
+
+<p>The local intent recognition handles the commands I know about. There will always be a long tail — a phrasing I did not anticipate, a new device someone asks about, a question rather than a command.</p>
+
+<p>For the long tail, I plan to use a public LLM as a fallback rather than the local hailo-ollama. The key insight from this whole journey: what I needed was determinism, not intelligence. A small local model with enough context to be accurate introduces latency that defeats the purpose. A public cloud LLM for the rare cases that slip through local matching is a much better tradeoff — the latency is acceptable precisely because it is the exception, not the rule.</p>
+
+<p>The important thing is that the main components stay local: STT on the Hailo NPU, custom sentence matching in HA, corrections in the proxy. None of these depend on a network connection. Busy servers and congested networks do not affect whether your lights turn on. The cloud LLM fallback only touches the long tail — novel requests rather than urgent device control — so the occasional latency there is acceptable.</p>
+
+<p>That said, if I had a beefier local machine, I would still want a local LLM. A larger model with more memory headroom would not hit the same accuracy/latency tradeoff that killed it on the Pi. The Raspberry Pi is the wrong host for LLM inference; that does not mean local LLMs are the wrong answer in general.</p>
+
+<hr>
+
+<h2>Using the Published Images</h2>
+
+<p>After getting everything working, we packaged both components as public Docker images so that other people do not have to repeat the same painful discovery process.</p>
+
+<p>The images are on Docker Hub:</p>
+
+<ul>
+  <li><a href="https://hub.docker.com/r/canthefason/hailo-ollama"><code>canthefason/hailo-ollama</code></a> — the proxy + runtime, ready to run in front of hailo-ollama</li>
+  <li><a href="https://hub.docker.com/r/canthefason/wyoming-hailo-whisper"><code>canthefason/wyoming-hailo-whisper</code></a> — Wyoming protocol server wrapping the Hailo NPU Whisper encoder</li>
+</ul>
+
+<p>There is an important design decision worth explaining here. The <code>hailo-ollama</code> binary itself and the HailoRT native library (<code>libhailort.so</code>) are Hailo's proprietary software. We cannot redistribute them inside a public Docker image. So the images contain only our code — the proxy, the Wyoming server, and their runtime dependencies. The Hailo binaries are <strong>bind-mounted from the Pi host at runtime</strong>.</p>
+
+<p>This means the images are freely publishable, and you can upgrade HailoRT on the Pi without rebuilding the Docker image — just update the version suffix in the bind-mount path. The tradeoff is that you need HailoRT installed on the Pi host first, which is handled by <code>01-install-hailo-voice-assistant.sh</code>.</p>
+
+<p>The repo includes a fully annotated minimal compose file that covers only the voice assistant services:</p>
+
+<p><a href="https://github.com/canthefason/hailo-voice-assistant/blob/main/docker-compose.voice-assistant.yml"><code>docker-compose.voice-assistant.yml</code></a></p>
+
+<p>To get started, there is one manual step before you run anything: the HailoRT packages are not publicly downloadable — Hailo requires a free developer account. Register at <a href="https://hailo.ai/developer-zone/">hailo.ai/developer-zone</a>, download the two <code>.deb</code> files for HailoRT 5.3.0 (the runtime package and the PCIe driver), and copy them to your Pi's home directory:</p>
+
+<pre><code>scp hailort_5.3.0_arm64.deb hailort-pcie-driver_5.3.0_arm64.deb pi@rpi.local:~/</code></pre>
+
+<p>Once those are on the Pi, clone the repo and run the install scripts:</p>
+
+<pre><code>git clone https://github.com/canthefason/hailo-voice-assistant
+bash 01-install-hailo-voice-assistant.sh   # sets up Pi, HailoRT, base stack
+bash 02-install-hailo-ollama-npu.sh        # installs hailo-ollama with NPU + proxy</code></pre>
+
+<p>The scripts handle everything else from there — DKMS kernel module, Python bindings, Docker images, model download, and compose wiring.</p>
+
+<hr>
+
+<h2>Key Takeaways</h2>
+
+<p>The Hailo AI HAT+ delivers on its performance promise. The NPU is real and the latency improvement over CPU inference is substantial. But the software ecosystem is still young, and the path from "hardware that works" to "voice assistant that replaces Alexa" involved several pivots that were not obvious at the start.</p>
+
+<p>The most important lesson: for a voice assistant handling a known set of home automation commands, what you need is determinism, not intelligence. A local LLM small enough to run on constrained hardware is non-deterministic by nature — you can improve accuracy by giving it more context, but more context means higher latency, and at some point you have a 30-second voice assistant that is worse than what you started with.</p>
+
+<p>The right architecture turns out to be: fast local STT, deterministic local intent matching for known commands, corrections for the imperfect transcription cases, and a cloud fallback for the long tail. The local components handle the latency-sensitive part reliably. The cloud component only handles the edge cases where a bit of latency is acceptable.</p>
+
+<p>The things that will trip you up most if you try to replicate this:</p>
+
+<ol>
+  <li>The JSON sanitisation bug in hailo-ollama — both layers of it. Test with real HA system prompts, not synthetic ones.</li>
+  <li>The blob storage path format — underscore not colon, singular <code>blob</code> not <code>blobs</code>.</li>
+  <li>VDevice sharing — do not forget <code>HAILO_VDEVICE_GROUP_ID</code> in both containers.</li>
+  <li>Model installation order — always stop hailo-whisper before installing a model.</li>
+  <li>Use <code>prefer_local_intents: true</code> and write custom hassil sentences for anything you say regularly. Use a public LLM (or Claude) to generate the full set of surface forms — it is much faster than writing them by hand.</li>
+  <li>Enable STT logging early. The log tells you what your household is actually saying and where transcription is failing. That data is how you improve the system over time.</li>
+</ol>
+
+<p>The code and install scripts are on GitHub: <a href="https://github.com/canthefason/hailo-voice-assistant">github.com/canthefason/hailo-voice-assistant</a></p>
+
+<p>One last honest note: Alexa is still plugged in, but barely. The daily commands — lights, shades, heat pump — are handled locally now, and reliably. The gap between this and a full Alexa replacement is small. More importantly, when something does not work, I know exactly where to look: the STT log shows what was heard, the HA trace shows whether a sentence matched, the proxy log shows what went to the LLM. With Alexa, that kind of visibility did not exist. Debugging was guesswork. That alone makes this worth it.</p>
+
+<hr>
+
+<p><em>Running fully offline on Raspberry Pi 5 + Hailo AI HAT+2 since early 2026.</em></p>
+
+</body>
+</html>
