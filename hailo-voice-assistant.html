@@ -86,7 +86,7 @@
   </thead>
   <tbody>
     <tr><td>Wake Word + Mic</td><td>Waveshare ESP32-S3 AI Smart Speaker</td><td>ESPHome / Wyoming</td><td>Always-on, runs on device</td></tr>
-    <tr><td>Speech-to-Text</td><td><code>hailo-whisper</code> container</td><td>Wyoming</td><td>Hailo-10H NPU</td></tr>
+    <tr><td>Speech-to-Text</td><td><code>hailo-whisper</code> container</td><td>Wyoming</td><td>Whisper Small on Hailo-10H NPU (largest Whisper model available for this hardware)</td></tr>
     <tr><td>LLM Inference</td><td><code>hailo-ollama</code> container</td><td>HTTP (custom)</td><td>Hailo-10H NPU</td></tr>
     <tr><td>Text-to-Speech</td><td><code>piper</code> container</td><td>Wyoming</td><td>CPU</td></tr>
     <tr><td>Orchestration</td><td><code>homeassistant</code> container</td><td>REST / WebSocket</td><td>CPU</td></tr>
@@ -179,7 +179,7 @@ intents:
 
 <h2>Handling the Imperfect Transcription Problem</h2>
 
-<p>Even with Hailo Whisper doing well, there were still times it did not understand me correctly. English is not my first language, and the model would sometimes transcribe "dim the lights" as "dim the lights" with a different entity name, or mishear a room name entirely.</p>
+<p>Even with Hailo Whisper doing well — we are using Whisper Small, which is the largest Whisper model available for the Hailo-10H NPU — there were still times it did not understand me correctly. English is not my first language, and the model would sometimes transcribe "dim the lights" as "dim the lights" with a different entity name, or mishear a room name entirely.</p>
 
 <p>For a set of known commands, the failure mode I cared about was not "wrong answer" but "no answer at all" — the STT output not matching any custom sentence, causing the LLM to kick in and introduce latency. What matters is getting immediate responses even for near-miss transcriptions.</p>
 
