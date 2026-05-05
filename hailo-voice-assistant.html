@@ -196,6 +196,41 @@ intents:
 
 <p>To make it easy to grow the corrections list — and to discover what commands other family members are actually saying — I enabled Hailo Whisper to log both the transcribed sentence and the Home Assistant response it triggered. The log becomes a running record of all voice interactions: what was said, what HA understood, what it did. From that, it is straightforward to spot patterns and either add corrections or add new custom sentences for commands that are being used but not yet covered.</p>
 
+<h3>Automating the Corrections List with the Local LLM</h3>
+
+<p>Reading the log manually is fine when you first set up the system. It stops being fine after a few weeks. So we automated it: a Python script runs every night at 2AM, reads the last 24 hours of errors, asks the local LLM whether each one looks like a Whisper misrecognition, and appends any new corrections to the file.</p>
+
+<p>This is, admittedly, a bandaid. A larger model on beefier hardware would not need it — it would transcribe accurately enough that the corrections list stays short. But on constrained hardware running a limited set of daily commands, this approach works well. The command vocabulary is small and stable, the error rate is low, and running inference on a tiny nightly payload costs nothing since the NPU is otherwise idle.</p>
+
+<p>The transcript log format is tab-separated: timestamp, raw transcript, normalised transcript, status (<code>action_done</code> or <code>error</code>), and the HA result. The script filters for <code>error</code> rows from the past 24 hours and passes each one to the local LLM — <code>qwen2.5:1.5b</code> via the same OpenAI-compat endpoint on port 11434 — along with the full list of friendly names pulled live from HA's <code>/api/states</code>. That entity list is the context that makes the classification useful: the model can see that "Dining Room Lights" is a real device and reason that "dying room" is a phonetic near-miss.</p>
+
+<p>One lesson learned quickly: do not ask a 1.5B model to produce a structured JSON array for multiple inputs in one call. It will invent field names, truncate the output mid-item, and apply few-shot examples to the wrong transcripts. The reliable approach is one call per transcript, asking for a single line of output:</p>
+
+<pre><code>YES: dying room -> dining room
+# or
+NO</code></pre>
+
+<p>Even then, the model ignores the format instruction about half the time and adds an explanation paragraph. So instead of enforcing the format, we search for the <code>YES: X -> Y</code> pattern anywhere in the response and treat everything else as a no.</p>
+
+<p>Even with that flexibility, the model will occasionally hallucinate a correction — applying an example from the few-shot prompt to a transcript where it has nothing to do, or inventing a replacement that does not correspond to any real device. Three sanity guards catch these before anything touches the corrections file:</p>
+
+<ol>
+  <li><strong>The misheard words must appear verbatim in the transcript.</strong> If the model says <code>dying room -> dining room</code> for the transcript "I have the permissions", the word "dying" is not in that transcript — rejected.</li>
+  <li><strong>The replacement must match a known entity name or a recognised action word.</strong> "Good night -> Turn off the lights" fails this: "Turn off the lights" is not an entity name and is not in the action word list — rejected.</li>
+  <li><strong>The misheard phrase must be at least two words and not the entire transcript.</strong> Phonetic misrecognitions affect part of a sentence — a room name, a verb. If the "misheard" phrase is the whole input, it is either correctly transcribed or too short to correct safely — rejected.</li>
+</ol>
+
+<p>These three guards have caught every hallucination we have seen in practice. The correction only lands if the model identifies something that is actually in the transcript, actually maps to a real device, and is a partial phrase rather than the whole utterance.</p>
+
+<p>The full script is at <a href="https://github.com/canthefason/hailo-voice-assistant/blob/main/whisper-corrections-cron.py"><code>whisper-corrections-cron.py</code></a> in the repo. It is deployed at <code>/home/ctf/homeassistant/whisper_corrections_cron.py</code> and runs under cron:</p>
+
+<pre><code>0 2 * * * /usr/bin/python3 /home/ctf/homeassistant/whisper_corrections_cron.py \
+  >> /home/ctf/homeassistant/whisper-logs/corrections_cron.log 2>&amp;1</code></pre>
+
+<p>Each run also appends to <code>corrections_review.log</code> — a permanent audit trail of what was proposed, what was added, and what was rejected. If a correction starts causing problems, the log shows exactly when it was added and what the model said at the time.</p>
+
+<p>Is this the right long-term solution? Probably not. A larger model with a longer context window would classify more accurately and not need sanity guards to catch its own hallucinations. But the right question for this hardware is not "what would work best?" — it is "what works reliably within these constraints?" The command set is small, the error rate is low, and the nightly window is the only time when doing a 2-second LLM call per error row is completely free. For a household running a limited number of daily voice commands, this is the right tradeoff.</p>
+
 <hr>
 
 <h2>What's Next: Public LLM as a Fallback</h2>
