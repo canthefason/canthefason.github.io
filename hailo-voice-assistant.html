@@ -99,56 +99,13 @@
 
 <h2>First Challenge: hailo-ollama Is Not Ollama</h2>
 
-<p>Home Assistant has an integration called <strong>Extended OpenAI Conversation</strong>. It speaks OpenAI-compatible API. Standard Ollama also speaks OpenAI-compatible API on port 11434. So in theory, you point HA at <code>http://localhost:11434/v1</code>, it talks to Ollama, done.</p>
-
-<p>But <code>hailo-ollama</code> is not Ollama. It is a completely different implementation, built by Hailo to run models on their HEF (Hailo Executable Format) hardware. It shares the same port convention by default but the similarities end there.</p>
-
-<p>First problem I discovered: the <code>/v1/models</code> endpoint that Home Assistant calls to enumerate available models — hailo-ollama does not have it in standard Ollama format. It has <code>/api/tags</code> endpoint instead.</p>
-
-<p>Second problem: the model manifest format is completely different. Standard Ollama uses GGUF files and an OCI-style manifest. hailo-ollama uses a JSON manifest like this:</p>
-
-<pre><code>{
-  "hef_h10h": "sha256:abc123...",
-  "details": { ... }
-}</code></pre>
-
-<p>There is no <code>layers</code>, no <code>config</code>, no standard format. Running <code>hailo-ollama pull</code> actually starts a second server process that immediately crashes.</p>
-
-<p>Third problem — and this one cost me many hours: hailo-ollama has no <code>/api/create</code> endpoint. Standard Ollama lets you create model aliases with a Modelfile. hailo-ollama has none of this. You must use the exact model name. No aliases.</p>
-
-<p>So the full picture: different API surface, different manifest format, different blob storage layout, no model aliases. Home Assistant integration that "should just work" — completely broken.</p>
+<p>Home Assistant's Extended OpenAI Conversation integration expects standard Ollama on port 11434. hailo-ollama shares the port but almost nothing else: the <code>/v1/models</code> endpoint doesn't exist, the model manifest format is completely different (HEF-based, not GGUF/OCI), <code>hailo-ollama pull</code> crashes on invocation, and there's no <code>/api/create</code> — so no model aliases. Pointing HA at hailo-ollama out of the box fails silently in multiple ways.</p>
 
 <h3>The Solution: A Translation Proxy</h3>
 
-<p>The cleanest approach was to put a proxy between Home Assistant and hailo-ollama. This proxy would:</p>
+<p>We put a Python proxy between HA and hailo-ollama. It listens on 11434 (what HA expects), translates <code>/v1/models</code> to <code>/api/tags</code>, and forwards to hailo-ollama on 11436.</p>
 
-<ol>
-  <li>Listen on port 11434 (what HA expects Ollama on)</li>
-  <li>Translate incoming requests to what hailo-ollama actually understands</li>
-  <li>Forward to hailo-ollama on port 11436 (we moved native server there)</li>
-  <li>Return responses back to HA in format it expects</li>
-</ol>
-
-<p>We wrote this proxy in Python. It lives in its own <code>hailo_ollama_proxy/</code> directory with a dedicated Dockerfile — so it is independently versioned, testable, and deployable.</p>
-
-<p><strong>Endpoint translation</strong> is the simplest fix: <code>/v1/models</code> → <code>/api/tags</code>. When HA calls <code>/v1/models</code>, the proxy rewrites the path and reformats the response to match what HA expects.</p>
-
-<p><strong>Two-layer JSON sanitisation</strong> is where it gets interesting. There are two separate bugs that interact with each other.</p>
-
-<p><em>Layer 1</em>: HA sends literal newline characters (<code>U+000A</code>) inside JSON string values. This is invalid JSON — newlines inside strings must be escaped as <code>\n</code>. The fix: scan for literal control characters before parsing and re-encode them.</p>
-
-<p><em>Layer 2</em>: Even after Layer 1 gives hailo-ollama valid JSON with properly escaped <code>\n</code> sequences — hailo-ollama's internal HailoRT genAI library re-serialises message content to its own format and does not escape newlines during that pass. It takes the <code>\n</code> escape sequence, converts it back to a literal LF, and puts that into a new JSON string. Invalid JSON again, deep inside hailo-ollama's pipeline.</p>
-
-<p>The fix for Layer 2 is more aggressive: after Layer 1, parse the JSON, then walk through all <code>messages[].content</code>, <code>prompt</code>, and <code>system</code> string values and replace newlines, carriage returns, and tabs with spaces:</p>
-
-<pre><code>def sanitize_for_hailo(body_dict):
-    # marker: hailo-sanitize-v1
-    for msg in body_dict.get("messages", []):
-        if isinstance(msg.get("content"), str):
-            msg["content"] = msg["content"].replace("\n", " ").replace("\r", " ").replace("\t", " ")
-    ...</code></pre>
-
-<p>We mark this function with a comment <code># hailo-sanitize-v1</code> and the Docker image build script checks for this string to verify the proxy has the correct version of the sanitisation code. This prevents situations where we rebuild the image but accidentally ship an old proxy.</p>
+<p>The harder part was JSON sanitisation — two separate bugs that interact. HA sends literal newline characters inside JSON strings, which is invalid. The proxy fixes those before parsing. But even with valid JSON, hailo-ollama's internal HailoRT library re-serialises message content and re-introduces unescaped newlines in its own pass. The second fix walks all message content after parsing and replaces newlines with spaces before forwarding. Both layers are necessary — fixing only one still crashes the pipeline.</p>
 
 <h3>NPU Sharing: The Detail That Catches Everyone</h3>
 
