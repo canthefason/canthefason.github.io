@@ -202,7 +202,31 @@ intents:
 
 <p>This is, admittedly, a bandaid. A larger model on beefier hardware would not need it — it would transcribe accurately enough that the corrections list stays short. But on constrained hardware running a limited set of daily commands, this approach works well. The command vocabulary is small and stable, the error rate is low, and running inference on a tiny nightly payload costs nothing since the NPU is otherwise idle.</p>
 
-<p>The transcript log format is tab-separated: timestamp, raw transcript, normalised transcript, status (<code>action_done</code> or <code>error</code>), and the HA result. The script filters for <code>error</code> rows from the past 24 hours and passes each one to the local LLM — <code>qwen2.5:1.5b</code> via the same OpenAI-compat endpoint on port 11434 — along with the full list of friendly names pulled live from HA's <code>/api/states</code>. That entity list is the context that makes the classification useful: the model can see that "Dining Room Lights" is a real device and reason that "dying room" is a phonetic near-miss.</p>
+<p>The transcript log format is tab-separated: timestamp, raw transcript, normalised transcript, status (<code>action_done</code> or <code>error</code>), and the HA result. The script filters for <code>error</code> rows from the past 24 hours and passes each one to the local LLM — <code>qwen2.5:1.5b</code> via the same OpenAI-compat endpoint on port 11434 — along with three sources of context pulled at runtime:</p>
+
+<ol>
+  <li><strong>Entity friendly names</strong> from HA's <code>/api/states</code> — the full list of known devices and scenes (163 in our case). This lets the model see that "Dining Room Lights" is a real device and reason that "dying room" is a phonetic near-miss.</li>
+  <li><strong>Custom sentence YAML patterns</strong> — the hassil syntax patterns from <code>lights.yaml</code>, <code>shades.yaml</code>, and <code>heat_pump.yaml</code>. With these in context, the model can tell that "bright under office lights" nearly matches <code>(brighten|raise|increase) [the] {room} (lights|light)</code> — one garbled word away from a real command — rather than treating it as random noise.</li>
+  <li><strong>Conversation-trigger automation sentences</strong> — e.g. <code>(good morning|morning routine)</code>. Any sentence that already has a trigger is known vocabulary; the model can factor that in when deciding if a transcript is a near-miss or background.</li>
+</ol>
+
+<p>The prompt structure for each transcript looks like this:</p>
+
+<pre><code>Smart home devices: Bedroom Light, Dining Room Lights, Office Lights, ...
+
+Known HA voice command patterns:
+  - (dim|lower|decrease|set|put) [the] {room} [lights|light] to {brightness} [percent|%]
+  - (brighten|raise|increase) [the] {room} (lights|light) [a bit|slightly|up]
+  - (open|raise|pull up) [the] {room} (shade|shades|blind|blinds|curtain|curtains)
+  - (good morning|morning routine)
+  - ...
+
+Task: did the speech-to-text engine mishear a real smart home command?
+Transcript: "bright under office lights."
+
+"bright under office lights." -&gt;</code></pre>
+
+<p>Having the sentence patterns in context is the meaningful improvement over just the entity list. The entity list tells the model what <em>things</em> exist; the patterns tell it what <em>commands</em> are understood. Together they let it make a much more grounded judgment about whether a failed transcript is a near-miss worth correcting or something that simply has no matching intent.</p>
 
 <p>One lesson learned quickly: do not ask a 1.5B model to produce a structured JSON array for multiple inputs in one call. It will invent field names, truncate the output mid-item, and apply few-shot examples to the wrong transcripts. The reliable approach is one call per transcript, asking for a single line of output:</p>
 
